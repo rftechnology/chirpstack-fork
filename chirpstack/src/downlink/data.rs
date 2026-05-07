@@ -735,6 +735,7 @@ impl Data {
         let mut f_pending = self.more_device_queue_items;
         let dev_addr = self.device.get_dev_addr()?;
         let device_f_cnt_up = self.device.f_cnt_up as u32;
+        let dev_eui_flush = self.device.dev_eui.to_string();
         let ds = self.device.get_device_session_mut()?;
 
         for item in self.downlink_frame_items.iter_mut() {
@@ -935,7 +936,7 @@ impl Data {
                 // Flag it for proper handling in the next uplink.
                 trace!("KRAMERMEISTER ==> Push DevEui 4 Uplink Flush Queue");
                 self.flush_dev_queue_on_uplink_items
-                    .push(self.device.dev_eui.to_string());
+                    .push(dev_eui_flush.clone());
             }
         }
 

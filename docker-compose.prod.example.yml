@@ -1,0 +1,82 @@
+# Production-oriented Compose example: all images are pulled from ECR (or any registry).
+# This does NOT build ChirpStack from source — push the image built by your CI (root Dockerfile / make dist) to ECR first.
+#
+# Usage:
+#   1. Copy deploy/env.production.example to .env.production and fill in values.
+#   2. Mirror third-party images to ECR (postgres, redis, ...) or set REGISTRY_PREFIX to docker.io etc.
+#   3. Prepare a config directory (see below) and set CHIRPSTACK_CONFIG_DIR.
+#   4. docker compose --env-file .env.production -f docker-compose.prod.example.yml up -d
+#
+# ChirpStack expects:  chirpstack -c <config directory>  (directory of *.toml files)
+
+services:
+  chirpstack:
+    image: ${CHIRPSTACK_IMAGE:?set CHIRPSTACK_IMAGE e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/chirpstack}
+    restart: unless-stopped
+    command: ["-c", "/etc/chirpstack"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${CHIRPSTACK_API_BIND:-8080}:8080"
+    environment:
+      # Used by ${POSTGRES_PASSWORD} substitution in chirpstack.toml (see config::load).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - "${CHIRPSTACK_CONFIG_DIR:?set CHIRPSTACK_CONFIG_DIR}:/etc/chirpstack:ro"
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?set POSTGRES_IMAGE}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chirpstack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-chirpstack}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-chirpstack} -d ${POSTGRES_DB:-chirpstack}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: ${REDIS_IMAGE:?set REDIS_IMAGE}
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mosquitto:
+    image: ${MOSQUITTO_IMAGE:?set MOSQUITTO_IMAGE}
+    restart: unless-stopped
+    volumes:
+      # Replace with your own broker config for production (TLS, auth, etc.).
+      - ${MOSQUITTO_CONFIG_DIR:?set MOSQUITTO_CONFIG_DIR}:/mosquitto/config:ro
+
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:?set RABBITMQ_IMAGE}
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-chirpstack}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+
+  kafka:
+    image: ${KAFKA_IMAGE:?set KAFKA_IMAGE}
+    restart: unless-stopped
+    # Single-broker defaults depend on the upstream image version; adjust for your mirrored tag.
+
+volumes:
+  postgres_data:
+  redis_data:

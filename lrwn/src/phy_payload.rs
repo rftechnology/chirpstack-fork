@@ -925,7 +925,7 @@ impl PhyPayload {
                 return Ok(());
             }
 
-            let uplink = is_uplink(self.mhdr.m_type);
+            let uplink = is_uplink(self.mhdr.f_type);
             let data = pl.frm_payload.as_ref().unwrap().to_vec()?;
             let data = encrypt_frm_payload(key, uplink, &pl.fhdr.devaddr, pl.fhdr.f_cnt, &data)?;
             pl.frm_payload = Some(FRMPayload::Raw(data));
