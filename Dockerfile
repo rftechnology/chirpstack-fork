@@ -1,30 +1,43 @@
-# Copy binary stage
-FROM --platform=$BUILDPLATFORM alpine:3.23.3 as binary
+# syntax=docker/dockerfile:1.7
+# linux/amd64: dist-amd64 (glibc, no cross). Build: docker build --platform linux/amd64 ...
 
-ARG TARGETPLATFORM
+FROM nixos/nix:2.24.9 AS base
 
-COPY target/x86_64-unknown-linux-musl/release/chirpstack /usr/bin/chirpstack-x86_64
-COPY target/armv7-unknown-linux-musleabihf/release/chirpstack /usr/bin/chirpstack-armv7hf
-COPY target/aarch64-unknown-linux-musl/release/chirpstack /usr/bin/chirpstack-aarch64
+WORKDIR /app
 
-RUN case "$TARGETPLATFORM" in \
-	"linux/amd64") \
-		cp /usr/bin/chirpstack-x86_64 /usr/bin/chirpstack; \
-		;; \
-	"linux/arm/v7") \
-		cp /usr/bin/chirpstack-armv7hf /usr/bin/chirpstack; \
-		;; \
-	"linux/arm64") \
-		cp /usr/bin/chirpstack-aarch64 /usr/bin/chirpstack; \
-		;; \
-	esac;
+ENV NIX_CONFIG="sandbox = false"
+ENV CARGO_INCREMENTAL=0
+ENV CI=true
+ARG DATABASE=postgres
+ENV DATABASE=${DATABASE}
 
-# Final stage
-FROM alpine:3.23.3
+RUN nix-channel --add https://nixos.org/channels/nixos-25.11 nixpkgs \
+	&& nix-channel --update
 
-RUN apk --no-cache add \
-    ca-certificates
+COPY . .
 
-COPY --from=binary /usr/bin/chirpstack /usr/bin/chirpstack
-USER nobody:nogroup
-ENTRYPOINT ["/usr/bin/chirpstack"]
+# Build UI
+FROM base AS ui-build
+RUN nix-shell shell.nix --command "make build-ui"
+
+# Run tests
+FROM ui-build AS test
+RUN nix-shell shell.nix --command "make test"
+
+# Dev tools + x86_64-only dist (no cross)
+FROM ui-build AS dist
+RUN nix-shell shell.nix --command "make dev-dependencies"
+RUN nix-shell shell.nix --command "make dist-amd64"
+
+# Optional runtime image
+FROM debian:bookworm-slim AS runtime
+
+WORKDIR /app
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
+ COPY --from=dist /app/dist /app/dist
+
+CMD ["ls", "-lah", "/app/dist"]
