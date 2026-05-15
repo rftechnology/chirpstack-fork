@@ -1,9 +1,14 @@
-.PHONY: dist api
+.PHONY: dist dist-amd64 api
 
 # Build distributable binaries.
 dist:
 	cd api && make grpc-web
 	cd chirpstack && make dist
+
+# x86_64 / glibc only (no cross); use in linux/amd64 Docker builds.
+dist-amd64:
+	cd api && make grpc-web
+	cd chirpstack && make dist-amd64
 
 # Install dev dependencies
 dev-dependencies:
