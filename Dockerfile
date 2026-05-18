@@ -7,9 +7,11 @@
 # On Apple Silicon (or ARM CI) omitting --platform builds arm64 stages and often breaks Makefile
 # dist-amd64 (x86_64-gnu) vs this Dockerfile’s expectations.
 #
-# Targets:
-#   runtime (default last stage) — runnable binary plus /app/dist from Nix `make dist-amd64`.
-#   runtime-minimal — same binary only; skips `dist` (faster, no COPY --from dist).
+# Targets — when to use which:
+#   runtime-minimal — you only need to run ChirpStack (web UI is embedded in the binary). Smaller image;
+#     skips /app/dist. Typical prod: run the container + Postgres, no installers on disk.
+#   runtime (default) — same binary plus /app/dist (.deb, .rpm, tarballs from Nix `make dist-amd64`).
+#     Use when you copy those artifacts out of the image or anything expects /app/dist on disk.
 #
 # Minimal image only:
 #   docker build --platform linux/amd64 --target runtime-minimal -t chirpstack:slim .
@@ -55,6 +57,7 @@ ENV CI=true
 ENV CARGO_INCREMENTAL=0 \
 	LIBCLANG_PATH=/usr/lib/x86_64-linux-gnu
 
+# System packages missing from `rust:bookworm` but required by the following `cargo build` (linking, bindgen, protobuf codegen). 
 RUN apt-get update \
 	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 	binutils clang libclang-dev pkg-config protobuf-compiler libprotobuf-dev cmake \
@@ -69,11 +72,13 @@ RUN export BINDGEN_EXTRA_CLANG_ARGS="-I`clang -print-resource-dir`/include" \
 
 RUN test -x /app/target/release/chirpstack
 
-# Runnable image — binary only (no `dist`; does not execute Nix packaging stage).
+# Runnable image — binary only (UI embedded at compile time). Skips /app/dist; use when you are not
+# publishing or consuming .deb/.rpm/tarballs from inside the image.
 FROM debian:bookworm-slim AS runtime-minimal
 
 WORKDIR /app
 
+# Runtime libs missing from `debian:bookworm-slim` but required by the shipped binary (TLS, Postgres client, OpenSSL).
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
 	&& rm -rf /var/lib/apt/lists/*
@@ -85,11 +90,13 @@ RUN test -x /usr/bin/chirpstack
 ENTRYPOINT ["/usr/bin/chirpstack"]
 CMD ["--config", "/etc/chirpstack"]
 
-# Runnable image — binary plus Nix-produced packages under /app/dist
+# Runnable image — binary plus Nix installers/tarballs under /app/dist. Use when you need those artifacts
+# on disk (extract, mirror, or downstream expects /app/dist). Default build target.
 FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
+# Runtime libs missing from `debian:bookworm-slim` but required by the shipped binary (TLS, Postgres client, OpenSSL).
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
 	&& rm -rf /var/lib/apt/lists/*
