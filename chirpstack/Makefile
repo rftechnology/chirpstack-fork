@@ -1,4 +1,7 @@
-.PHONY: dist
+.PHONY: dist dist-amd64
+
+# linux/amd64 glibc only — no cross (use in Docker linux/amd64 or native x86_64 Linux).
+RUST_AMD64_GNU ?= x86_64-unknown-linux-gnu
 
 PKG_VERSION := $(shell cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
 DATABASE ?= postgres
@@ -43,6 +46,16 @@ dist:
 	tar -czvf ../dist/chirpstack_$(PKG_VERSION)_$(DATABASE)_amd64.tar.gz -C ../target/x86_64-unknown-linux-musl/release chirpstack
 	tar -czvf ../dist/chirpstack_$(PKG_VERSION)_$(DATABASE)_armv7hf.tar.gz -C ../target/armv7-unknown-linux-musleabihf/release chirpstack
 	tar -czvf ../dist/chirpstack_$(PKG_VERSION)_$(DATABASE)_arm64.tar.gz -C ../target/aarch64-unknown-linux-musl/release chirpstack
+
+dist-amd64:
+	rustup target add $(RUST_AMD64_GNU)
+	cargo build --release --locked --no-default-features --features="$(DATABASE)" --target $(RUST_AMD64_GNU)
+	cargo deb --target $(RUST_AMD64_GNU) --no-build --no-strip $(VARIANT_FLAGS)
+	cargo generate-rpm --target $(RUST_AMD64_GNU) --target-dir ../target $(VARIANT_FLAGS)
+	mkdir -p ../dist
+	cp ../target/$(RUST_AMD64_GNU)/debian/*.deb ../dist
+	cp ../target/$(RUST_AMD64_GNU)/generate-rpm/*.rpm ../dist
+	tar -czvf ../dist/chirpstack_$(PKG_VERSION)_$(DATABASE)_amd64.tar.gz -C ../target/$(RUST_AMD64_GNU)/release chirpstack
 
 test:
 	cargo fmt --check

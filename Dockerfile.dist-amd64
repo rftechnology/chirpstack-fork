@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+# Optional: tiny runtime image when you already built chirpstack yourself (dist-amd64 / cargo).
+# Put the binary here relative to repo root—same path this COPY expects:
+#   target/x86_64-unknown-linux-gnu/release/chirpstack
+# Build (from repo root):
+#   docker build --platform linux/amd64 -f Dockerfile.dist-amd64 -t chirpstack .
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates libpq5 \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY target/x86_64-unknown-linux-gnu/release/chirpstack /usr/bin/chirpstack
+
+USER nobody:nogroup
+
+ENTRYPOINT ["/usr/bin/chirpstack"]

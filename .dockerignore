@@ -1,3 +1,7 @@
+# pnpm on Windows: opaque/reparse paths under the store break BuildKit context upload
+**/.pnpm-store
+.pnpm-store
+
 .git
 .cargo
 .rust
