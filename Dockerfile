@@ -16,7 +16,8 @@
 # Minimal image only:
 #   docker build --platform linux/amd64 --target runtime-minimal -t chirpstack:slim .
 
-FROM nixos/nix:2.24.9 AS base
+#FROM nixos/nix:2.24.9 AS base
+FROM 394139050861.dkr.ecr.us-east-2.amazonaws.com/exact-common-images-ecr-dev:nixos-nix-2.24.9 AS base
 
 WORKDIR /app
 
@@ -27,7 +28,7 @@ ENV CI=true
 ENV DATABASE=postgres
 
 RUN nix-channel --add https://nixos.org/channels/nixos-25.11 nixpkgs \
-	&& nix-channel --update
+  && nix-channel --update
 
 COPY . .
 
@@ -46,7 +47,8 @@ RUN nix-shell shell.nix --command "make dist-amd64"
 
 # Nix-linked ELFs use PT_INTERPRETER under /nix/store; Debian has no matching ld.so.
 # Rebuild on Bookworm for /lib64/ld-linux-x86-64.so.2.
-FROM rust:bookworm AS debian-chirpstack
+#FROM rust:bookworm AS debian-chirpstack
+FROM 394139050861.dkr.ecr.us-east-2.amazonaws.com/exact-common-images-ecr-dev:rust-bookworm AS debian-chirpstack
 
 WORKDIR /app
 COPY --from=ui-build /app /app
@@ -55,33 +57,34 @@ COPY --from=ui-build /app /app
 ENV DATABASE=postgres
 ENV CI=true
 ENV CARGO_INCREMENTAL=0 \
-	LIBCLANG_PATH=/usr/lib/x86_64-linux-gnu
+  LIBCLANG_PATH=/usr/lib/x86_64-linux-gnu
 
 # System packages missing from `rust:bookworm` but required by the following `cargo build` (linking, bindgen, protobuf codegen). 
 RUN apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-	binutils clang libclang-dev pkg-config protobuf-compiler libprotobuf-dev cmake \
-	libssl-dev libpq-dev libsasl2-dev zlib1g-dev jq \
-	&& rm -rf /var/lib/apt/lists/*
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  binutils clang libclang-dev pkg-config protobuf-compiler libprotobuf-dev cmake \
+  libssl-dev libpq-dev libsasl2-dev zlib1g-dev jq \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN export BINDGEN_EXTRA_CLANG_ARGS="-I`clang -print-resource-dir`/include" \
-	&& cargo build --release --locked \
-	--no-default-features \
-	--features=postgres \
-	-p chirpstack
+  && cargo build --release --locked \
+  --no-default-features \
+  --features=postgres \
+  -p chirpstack
 
 RUN test -x /app/target/release/chirpstack
 
 # Runnable image — binary only (UI embedded at compile time). Skips /app/dist; use when you are not
 # publishing or consuming .deb/.rpm/tarballs from inside the image.
-FROM debian:bookworm-slim AS runtime-minimal
+#FROM debian:bookworm-slim AS runtime-minimal
+FROM 394139050861.dkr.ecr.us-east-2.amazonaws.com/exact-common-images-ecr-dev:debian-bookworm-slim AS runtime-minimal
 
 WORKDIR /app
 
 # Runtime libs missing from `debian:bookworm-slim` but required by the shipped binary (TLS, Postgres client, OpenSSL).
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
-	&& rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=debian-chirpstack /app/target/release/chirpstack /usr/bin/chirpstack
 
@@ -92,14 +95,16 @@ CMD ["--config", "/etc/chirpstack"]
 
 # Runnable image — binary plus Nix installers/tarballs under /app/dist. Use when you need those artifacts
 # on disk (extract, mirror, or downstream expects /app/dist). Default build target.
-FROM debian:bookworm-slim AS runtime
+#FROM debian:bookworm-slim AS runtime
+
+FROM 394139050861.dkr.ecr.us-east-2.amazonaws.com/exact-common-images-ecr-dev:debian-bookworm-slim AS runtime
 
 WORKDIR /app
 
 # Runtime libs missing from `debian:bookworm-slim` but required by the shipped binary (TLS, Postgres client, OpenSSL).
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
-	&& rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=debian-chirpstack /app/target/release/chirpstack /usr/bin/chirpstack
 COPY --from=dist /app/dist /app/dist
