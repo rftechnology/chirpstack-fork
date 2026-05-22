@@ -13,6 +13,7 @@
 #   runtime (default) - same binary plus /app/dist (.deb, .rpm, tarballs from Nix `make dist-amd64`).
 #     Use when you copy those artifacts out of the image or anything expects /app/dist on disk.
 #
+# test  pipeline
 # Minimal image only:
 #   docker build --platform linux/amd64 --target runtime-minimal -t chirpstack:slim .
 
