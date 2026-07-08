@@ -1,0 +1,24 @@
+[general]
+    log_level = "info"
+
+[postgresql]
+    dsn = "postgresql://chirpstack:chirpstack@host.docker.internal:5432/chirpstack?sslmode=disable"
+
+[redis]
+    servers = ["redis://host.docker.internal:6379"]
+
+[mqtt]
+    server = "tcp://host.docker.internal:1883"
+
+[api]
+    bind = "0.0.0.0:8080"
+
+[monitoring]
+    bind = "0.0.0.0:8090"
+
+[gateway]
+    backend = "mqtt"
+
+[gateway.mqtt]
+    event_topic = "gateway/+/event/+"
+    command_topic = "gateway/+/command/+"
